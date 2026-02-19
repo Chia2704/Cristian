@@ -1,0 +1,8 @@
+[project]
+name = "mvp-monte-carlo-pricer"
+version = "0.1.0"
+description = "CLI Monte Carlo pricer"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
