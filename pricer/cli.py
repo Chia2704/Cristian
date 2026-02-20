@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
+import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -103,12 +105,41 @@ def price_cmd(args: argparse.Namespace) -> None:
 
 
 def run_all_cmd(args: argparse.Namespace) -> None:
-    outdir = Path(args.outdir)
+    run_all_pipeline(
+        basket_xlsx=args.basket_xlsx,
+        market_xlsx=args.market_xlsx,
+        outdir=args.outdir,
+        sofr_flat=args.sofr_flat,
+        rho=args.rho,
+        paths=args.paths,
+        seed=args.seed,
+        v_millions=args.v_millions,
+        greeks=args.greeks,
+        min_names=args.min_names,
+        overwrite=args.overwrite,
+    )
+
+
+def run_all_pipeline(
+    *,
+    basket_xlsx: str | Path,
+    market_xlsx: str | Path,
+    outdir: str | Path,
+    sofr_flat: float = DEFAULT_SOFR,
+    rho: float = DEFAULT_RHO,
+    paths: int = DEFAULT_PATHS,
+    seed: int = DEFAULT_SEED,
+    v_millions: float = 400.0,
+    greeks: bool = True,
+    min_names: int = 50,
+    overwrite: bool = False,
+) -> Path:
+    outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     check_files = ["trade.json", "market.json", "pricing_request.json", "pricing_result.json", "diagnostics.csv", "run_manifest.json"]
-    if args.greeks:
+    if greeks:
         check_files.append("greeks.csv")
-    if not args.overwrite:
+    if not overwrite:
         existing = [f for f in check_files if (outdir / f).exists()]
         if existing:
             raise ValueError(f"Refusing to overwrite existing files: {existing}. Use --overwrite.")
@@ -117,13 +148,13 @@ def run_all_cmd(args: argparse.Namespace) -> None:
     market_path = outdir / "market.json"
     req_path = outdir / "pricing_request.json"
 
-    build_trade_cmd(argparse.Namespace(basket_xlsx=args.basket_xlsx, out=trade_path, trade_date=None, valuation_date=None, min_names=args.min_names))
-    build_market_cmd(argparse.Namespace(market_xlsx=args.market_xlsx, out=market_path, sofr_flat=args.sofr_flat))
+    build_trade_cmd(argparse.Namespace(basket_xlsx=basket_xlsx, out=trade_path, trade_date=None, valuation_date=None, min_names=min_names))
+    build_market_cmd(argparse.Namespace(market_xlsx=market_xlsx, out=market_path, sofr_flat=sofr_flat))
 
     req = {
         "trade": str(trade_path), "market": str(market_path), "outdir": str(outdir),
-        "paths": args.paths, "seed": args.seed, "rho": args.rho, "sofr_flat": args.sofr_flat,
-        "v_millions": args.v_millions, "greeks": args.greeks, "min_names": args.min_names,
+        "paths": paths, "seed": seed, "rho": rho, "sofr_flat": sofr_flat,
+        "v_millions": v_millions, "greeks": greeks, "min_names": min_names,
     }
     write_json(req_path, req)
 
@@ -131,18 +162,25 @@ def run_all_cmd(args: argparse.Namespace) -> None:
         trade=trade_path,
         market=market_path,
         outdir=outdir,
-        paths=args.paths,
-        seed=args.seed,
-        rho=args.rho,
-        sofr_flat=args.sofr_flat,
-        v_millions=args.v_millions,
-        greeks=args.greeks,
-        min_names=args.min_names,
-        basket_xlsx=args.basket_xlsx,
-        market_xlsx=args.market_xlsx,
+        paths=paths,
+        seed=seed,
+        rho=rho,
+        sofr_flat=sofr_flat,
+        v_millions=v_millions,
+        greeks=greeks,
+        min_names=min_names,
+        basket_xlsx=basket_xlsx,
+        market_xlsx=market_xlsx,
         pricing_request_path=req_path,
     )
     price_cmd(price_args)
+    return outdir
+
+
+def gui_cmd(_args: argparse.Namespace) -> None:
+    gui_path = Path(__file__).with_name("gui_streamlit.py")
+    print("Open the forwarded port in Codespaces")
+    subprocess.run([sys.executable, "-m", "streamlit", "run", str(gui_path)], check=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -193,6 +231,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_all.add_argument("--min-names", type=int, default=50)
     p_all.add_argument("--overwrite", action="store_true")
     p_all.set_defaults(func=run_all_cmd)
+
+    p_gui = sub.add_parser("gui")
+    p_gui.set_defaults(func=gui_cmd)
     return parser
 
 
